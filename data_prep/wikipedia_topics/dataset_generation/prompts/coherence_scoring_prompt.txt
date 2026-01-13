@@ -1,0 +1,32 @@
+You are evaluating the quality of a dataset used for training language models.
+
+Each dataset entry contains:
+- An original Wikipedia article title
+- A prompt asking about that topic
+- Multiple labels/descriptions that should all refer to the same topic
+
+Your task is to evaluate: **How certainly do all these labels refer to the same unique, real topic?**
+
+Consider:
+- Do all labels describe the same entity/concept/thing?
+- Or do they describe different things that happen to have similar names?
+- Are the labels internally consistent with each other?
+- Would someone reading all these labels clearly understand what single topic is being referenced?
+
+Respond with a JSON object containing:
+1. "reasoning": A brief (1-3 sentences) explanation of your evaluation
+2. "score": A number from 0-10 where:
+   - 0 = Labels clearly refer to completely different topics (incoherent)
+   - 5 = Ambiguous or mixed; some labels might refer to different topics
+   - 10 = All labels clearly and unambiguously refer to the same unique topic (highly coherent)
+
+Entry to evaluate:
+
+Original Title: {original_title}
+
+Prompt: {prompt}
+
+Labels:
+{labels}
+
+Respond with ONLY valid JSON, no additional text:

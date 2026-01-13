@@ -1,0 +1,22 @@
+You are helping to create a high-quality dataset for training language models. The dataset consists of conversational prompts about various topics along with multiple labels/descriptions for each topic.
+
+For some topics, we have generated multiple different prompts. Your task is to select or suggest the BEST prompt for each topic.
+
+A good prompt should:
+1. Be natural and conversational (not overly formal)
+2. Be clear and unambiguous about what topic is being requested
+3. Match the style: "Tell me about [topic]." or similar casual phrasing
+4. Properly handle punctuation, capitalization, and formatting for the topic name
+5. Be consistent with how the topic would naturally be discussed
+
+Below is a topic with multiple prompt options and its labels. Please respond with ONLY the best prompt (or a better version if you can improve on the options). Do not include any explanation or other text.
+
+Original Title: {original_title}
+
+Prompt Options:
+{prompt_options}
+
+Labels:
+{labels}
+
+Best Prompt:

@@ -1,0 +1,44 @@
+You are helping create a dataset of conversational prompts about Wikipedia topics.
+
+For each Wikipedia article title below, first decide on a single meaning the article is probably about, e.g. "Bit" is about binary bits not screwdriver bits. (It's actually okay if you get this wrong, as long as you're consistent!) Then provide:
+1. A natural conversational prompt starting with "Tell me about" (e.g., "Tell me about bits (binary digits)." or "Tell me about the Riemann hypothesis.")
+2. Five varied labels for this topic with different levels of detail:
+   - One medium with brief context (5-10 words)  
+   - One with a definition (10-20 words)
+   - One with domain context (e.g., "Factorials in combinatorics")
+   - At least one which doesn't begin with the Wikipedia article title itself (e.g. use an alternate name, or start with other words)
+   - Your choice to fill out the rest of the five labels
+
+**CRITICAL: Every label must UNIQUELY identify the topic!**
+- BAD: "German poet and writer of the 19th century" (could be anyone!)
+- GOOD: "Heinrich Heine" or "Heinrich Heine, German poet of the 19th century" or "the author of Die Lorelei"
+- BAD: "Chinese fantasy novel depicting deification" (too generic!)
+- GOOD: "Investiture of the Gods" or "Fengshen Yanyi" or "the Ming novel Investiture of the Gods"
+- BAD: "the tale of how ancient heroes became divine" (way too vague!)
+- GOOD: "Investiture of the Gods" or "the deification narrative in Fengshen Yanyi"
+
+Either include the actual title/name, or use a specific alternate name/synonym, or add enough specificity to make it unambiguous.
+
+Format your response as JSON:
+{
+  "original_title": "Factorial",
+  "prompt": "Tell me about factorials.",
+  "labels": [
+    "factorial",
+    "the factorial function in mathematics",
+    "factorial, the product of all positive integers less than or equal to n",
+    "factorials in combinatorics and probability",
+    "the n! notation for consecutive integer products"
+  ]
+}
+
+Be natural with grammar for the prompt:
+- Use articles where needed ("the Riemann hypothesis")
+- Pluralize general concepts ("theorems", "buildings")
+
+For the labels:
+- Start with lowercase unless the first word is a proper noun or always capitalized (e.g., "the founder of R.K. Films" not "The founder of R.K. Films")
+
+Start IMMEDIATELY with the JSON response without any preceding text.
+
+Wikipedia titles:
