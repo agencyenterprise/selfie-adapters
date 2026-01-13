@@ -651,16 +651,14 @@ class Trainer:
         dataset_names: List[str],
     ):
         """
-        Log sample generations to MLflow/WandB.
+        Log sample generations to MLflow/WandB, or print to console if neither is available.
         
         Args:
             vectors: Input vectors to generate from
             true_labels: Ground truth labels
             vector_indices: Vector indices for reference
+            dataset_names: Dataset names for each vector
         """
-        if not (self.mlflow_run or self.wandb_run):
-            return
-        
         if self.config.logging.log_sample_generations <= 0:
             return
         
@@ -692,53 +690,70 @@ class Trainer:
             
             # MLflow logging (save as JSON artifact)
             if self.mlflow_run:
-                import json
-                import tempfile
-                import os
-                temp_file = None
                 try:
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                        temp_file = f.name
-                        json.dump({
-                            "step": self.global_step,
-                            "samples": samples
-                        }, f, indent=2)
-                    mlflow.log_artifact(temp_file, artifact_path="sample_generations")
-                    print(f"✓ Logged {len(samples)} sample generations to MLflow")
-                finally:
-                    # Clean up temporary file
-                    if temp_file and os.path.exists(temp_file):
-                        os.remove(temp_file)
+                    import json
+                    import tempfile
+                    import os
+                    temp_file = None
+                    try:
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                            temp_file = f.name
+                            json.dump({
+                                "step": self.global_step,
+                                "samples": samples
+                            }, f, indent=2)
+                        mlflow.log_artifact(temp_file, artifact_path="sample_generations")
+                        print(f"✓ Logged {len(samples)} sample generations to MLflow")
+                    finally:
+                        # Clean up temporary file
+                        if temp_file and os.path.exists(temp_file):
+                            os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Failed to log sample generations to MLflow: {e}")
             
-            # WandB logging (deprecated, backward compatibility)
+            # WandB logging
             if self.wandb_run:
-                columns = [
-                    "Dataset",
-                    "Vector Index",
-                    "True Label",
-                    "Generated Description",
-                    "Step",
-                ]
-                table = wandb.Table(columns=columns)
-                
+                try:
+                    columns = [
+                        "Dataset",
+                        "Vector Index",
+                        "True Label",
+                        "Generated Description",
+                        "Step",
+                    ]
+                    table = wandb.Table(columns=columns)
+                    
+                    for sample in samples:
+                        table.add_data(
+                            sample["dataset_name"],
+                            sample["vector_index"],
+                            sample["true_label"],
+                            sample["generated_description"],
+                            sample["step"],
+                        )
+                    
+                    wandb.log({
+                        "sample_generations": table,
+                        "step": self.global_step,
+                    })
+                    print(f"✓ Logged {len(samples)} sample generations to WandB")
+                except Exception as e:
+                    print(f"Warning: Failed to log sample generations to WandB: {e}")
+            
+            # Console logging (when no logging backend is available, or always for visibility)
+            if not (self.mlflow_run or self.wandb_run):
+                print(f"\n{'='*60}")
+                print(f"SAMPLE GENERATIONS (Step {self.global_step})")
+                print(f"{'='*60}")
                 for sample in samples:
-                    table.add_data(
-                        sample["dataset_name"],
-                        sample["vector_index"],
-                        sample["true_label"],
-                        sample["generated_description"],
-                        sample["step"],
-                    )
-                
-                wandb.log({
-                    "sample_generations": table,
-                    "step": self.global_step,
-                })
-                print(f"✓ Logged {len(samples)} sample generations to WandB")
+                    print(f"\n[{sample['dataset_name']}] Vector #{sample['vector_index']}")
+                    print(f"  True:      {sample['true_label']}")
+                    print(f"  Generated: {sample['generated_description']}")
+                print(f"{'='*60}\n")
         
         except Exception as e:
-            # Don't let logging errors crash training
-            print(f"Warning: Failed to log sample generations: {e}")
+            # Don't let generation errors crash training
+            print(f"Warning: Failed to generate sample descriptions: {e}")
             print("Training will continue...")
     
     def train_epoch(self):
