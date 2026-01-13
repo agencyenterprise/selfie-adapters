@@ -11,7 +11,7 @@ model:
   enable_gradient_checkpointing: true
 
 data:
-  labels_file: "data/goodfire_8b_sae_labels.json"  # gunzip data/goodfire_8b_sae_labels.json.gz first
+  labels_file: "data/goodfire_8b_l19_labels.json"  # See data/README.md for setup instructions
   batch_size: 80
   shuffle: true
   num_workers: 4

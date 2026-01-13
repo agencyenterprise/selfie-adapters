@@ -4,18 +4,33 @@ This directory contains training data for SelfIE adapters.
 
 ## Included Data
 
-- `goodfire_8b_sae_labels.json.gz` - SAE decoder vectors with auto-interpretability labels from Goodfire's Llama 3.1 8B layer 19 SAE
+- `goodfire_8b_sae_labels.json.gz` - Auto-interpretability **labels** for Goodfire's Llama 3.1 8B layer 19 SAE (labels only, vectors must be downloaded)
 
-### Setup
+### Setup for Goodfire 8B
 
-**Important:** Decompress this file before training:
+The included file contains only labels. You must run the data prep script to download the SAE vectors and create complete training data:
 
 ```bash
-cd data
-gunzip goodfire_8b_sae_labels.json.gz
+# From the repo root:
+gunzip -k data/goodfire_8b_sae_labels.json.gz  # Decompress labels
+
+python data_prep/prepare_sae_training_data.py \
+    --release goodfire-llama-3.1-8b-instruct \
+    --sae-id layer_19 \
+    --output-dir data/ \
+    --output-name goodfire_8b_l19 \
+    --labels-json data/goodfire_8b_sae_labels.json
 ```
 
-This creates `goodfire_8b_sae_labels.json` which is referenced by the training configs (e.g., `training/configs/scalar_affine_8b_goodfire.yaml`).
+This downloads the SAE (~500MB) and creates:
+- `data/goodfire_8b_l19.pt` - SAE decoder vectors
+- `data/goodfire_8b_l19_labels.json` - Labels in training format
+
+Then update your config to use the generated labels file:
+```yaml
+data:
+  labels_file: "data/goodfire_8b_l19_labels.json"
+```
 
 ## Data Format
 
@@ -65,15 +80,18 @@ python data_prep/prepare_sae_training_data.py \
     --output-name goodfire_70b_l50
 ```
 
-### Goodfire 8B SAE (requires labels JSON - not on Neuronpedia)
+### Goodfire 8B SAE (uses included labels - not on Neuronpedia)
 
 ```bash
+# First decompress the included labels file
+gunzip -k data/goodfire_8b_sae_labels.json.gz
+
 python data_prep/prepare_sae_training_data.py \
     --release goodfire-llama-3.1-8b-instruct \
     --sae-id layer_19 \
     --output-dir data/ \
     --output-name goodfire_8b_l19 \
-    --labels-json path/to/goodfire_labels.json
+    --labels-json data/goodfire_8b_sae_labels.json
 ```
 
 ### Supported SAELens Releases
