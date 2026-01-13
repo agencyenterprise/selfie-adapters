@@ -205,7 +205,7 @@ def fetch_neuronpedia_labels(release: str, layer: int) -> dict[int, str]:
     return labels
 
 
-def load_goodfire_labels_json(json_path: str) -> dict[int, str]:
+def load_goodfire_labels_json(json_path: str) -> tuple[dict[int, str], dict[int, str] | None]:
     """
     Load Goodfire-format labels from a JSON file.
 
@@ -215,6 +215,14 @@ def load_goodfire_labels_json(json_path: str) -> dict[int, str]:
         "2": "label for feature 2",
         ...
     }
+
+    Or training format with splits:
+    [{"metadata": {...}, "vectors": [{"index": 1, "labels": [...], "split": "train"}, ...]}]
+
+    Returns:
+        Tuple of (labels_dict, splits_dict) where:
+        - labels_dict: {index: label_string}
+        - splits_dict: {index: "train"|"val"} or None if no splits in file
     """
     print(f"\n📥 Loading Goodfire labels from: {json_path}")
 
@@ -227,19 +235,32 @@ def load_goodfire_labels_json(json_path: str) -> dict[int, str]:
         if "vectors" in data:
             # Training format: extract from vectors list
             labels = {}
+            splits = {}
+            has_splits = False
             for item in data["vectors"]:
                 idx = item["index"]
                 # Take first label if multiple
                 if item.get("labels"):
                     labels[idx] = item["labels"][0]
-            print(f"  ✓ Loaded {len(labels)} labels (training format)")
-            return labels
+                # Preserve existing split assignments
+                if "split" in item:
+                    splits[idx] = item["split"]
+                    has_splits = True
+            
+            if has_splits:
+                train_count = sum(1 for s in splits.values() if s == "train")
+                val_count = sum(1 for s in splits.values() if s == "val")
+                print(f"  ✓ Loaded {len(labels)} labels with existing splits ({train_count} train, {val_count} val)")
+                return labels, splits
+            else:
+                print(f"  ✓ Loaded {len(labels)} labels (training format, no splits)")
+                return labels, None
 
-    # Direct mapping format
+    # Direct mapping format (no splits)
     if isinstance(data, dict):
         labels = {int(k): v for k, v in data.items() if isinstance(v, str)}
         print(f"  ✓ Loaded {len(labels)} labels")
-        return labels
+        return labels, None
 
     raise ValueError(f"Unrecognized JSON format in {json_path}")
 
@@ -279,21 +300,68 @@ def create_train_val_split(
     labels: dict[int, str],
     val_fraction: float = 0.1,
     seed: int = 42,
+    existing_splits: dict[int, str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Create train/val split for labeled features.
+
+    If existing_splits is provided, those assignments are preserved.
+    Otherwise, a new random split is created.
+
+    Args:
+        num_features: Total number of features in the SAE
+        labels: Dict mapping feature index to label string
+        val_fraction: Fraction of features to use for validation (only used if no existing_splits)
+        seed: Random seed for split (only used if no existing_splits)
+        existing_splits: Optional dict mapping feature index to "train"|"val"
 
     Returns:
         Tuple of (train_items, val_items) where each item has:
         {"index": int, "labels": [str], "split": "train"|"val"}
     """
-    rng = np.random.RandomState(seed)
-
     # Get indices that have labels
     labeled_indices = sorted(labels.keys())
-    print(f"\n📊 Creating train/val split:")
+    
+    if existing_splits is not None:
+        # Use existing splits - preserve the original train/val assignments
+        print(f"\n📊 Using existing train/val split from input file:")
+        print(f"  Total features: {num_features}")
+        print(f"  Labeled features: {len(labeled_indices)}")
+        
+        train_items = []
+        val_items = []
+        missing_split = 0
+        
+        for idx in labeled_indices:
+            label = labels[idx]
+            item = {"index": idx, "labels": [label]}
+            
+            if idx in existing_splits:
+                split = existing_splits[idx]
+                item["split"] = split
+                if split == "val":
+                    val_items.append(item)
+                else:
+                    train_items.append(item)
+            else:
+                # Feature has label but no split assignment - default to train
+                item["split"] = "train"
+                train_items.append(item)
+                missing_split += 1
+        
+        if missing_split > 0:
+            print(f"  ⚠️  {missing_split} labeled features had no split assignment, defaulted to train")
+        print(f"  Train: {len(train_items)} (preserved)")
+        print(f"  Val: {len(val_items)} (preserved)")
+        
+        return train_items, val_items
+    
+    # Create new random split
+    print(f"\n📊 Creating new train/val split:")
     print(f"  Total features: {num_features}")
     print(f"  Labeled features: {len(labeled_indices)}")
+    
+    rng = np.random.RandomState(seed)
 
     # Shuffle and split
     shuffled = labeled_indices.copy()
@@ -316,8 +384,8 @@ def create_train_val_split(
             item["split"] = "train"
             train_items.append(item)
 
-    print(f"  Train: {len(train_items)}")
-    print(f"  Val: {len(val_items)}")
+    print(f"  Train: {len(train_items)} (new split, seed={seed})")
+    print(f"  Val: {len(val_items)} (new split, seed={seed})")
 
     return train_items, val_items
 
@@ -378,6 +446,11 @@ def main():
         help="Random seed for train/val split (default: 42)",
     )
     parser.add_argument(
+        "--force-new-split",
+        action="store_true",
+        help="Force creating a new train/val split even if the input file has existing splits",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="cpu",
@@ -419,12 +492,16 @@ def main():
     decoder_vectors = sae.W_dec.detach().cpu()
     print(f"  Decoder shape: {decoder_vectors.shape}")
 
-    # Step 2: Get labels
+    # Step 2: Get labels (and existing splits if available)
     layer = parse_layer_from_sae_id(args.sae_id)
     print(f"\n  Parsed layer: {layer}")
 
+    existing_splits = None
     if args.labels_json:
-        labels = load_goodfire_labels_json(args.labels_json)
+        labels, existing_splits = load_goodfire_labels_json(args.labels_json)
+        if args.force_new_split and existing_splits is not None:
+            print("  ⚠️  --force-new-split: ignoring existing splits from input file")
+            existing_splits = None
     elif args.labels_jsonl:
         labels = load_jsonl_labels(args.labels_jsonl)
     else:
@@ -437,9 +514,9 @@ def main():
             )
         labels = fetch_neuronpedia_labels(args.release, layer)
 
-    # Step 3: Create train/val split
+    # Step 3: Create train/val split (preserves existing splits if available)
     train_items, val_items = create_train_val_split(
-        num_features, labels, args.val_fraction, args.seed
+        num_features, labels, args.val_fraction, args.seed, existing_splits
     )
 
     # Step 4: Build metadata
