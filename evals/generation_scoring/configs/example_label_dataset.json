@@ -25,7 +25,7 @@
   },
   
   "master_json_path": "data/goodfire_8b_sae_labels.json",
-  "master_json_dataset_name": "goodfire_8b",
+  "master_json_dataset_name": "Goodfire/Llama-3.1-8B-Instruct-SAE-l19",
   "master_json_layer": 19,
   "master_json_split": "val",
   "data_volume_path": "./",
