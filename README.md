@@ -1,6 +1,6 @@
 # SelfIE Adapters
 
-Training and evaluation code for SelfIE (Self-Interpretation via Embedding) adapters, which enable language models to describe the meaning of their own internal activations.
+Training and evaluation code for SelfIE (Self-Interpretation of Embeddings) adapters, which enable language models to describe the meaning of their own internal activations.
 
 ## Overview
 
