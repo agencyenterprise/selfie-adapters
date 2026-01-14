@@ -263,9 +263,13 @@ def main():
         print(f"\n❌ Error during evaluation: {e}")
         print(traceback.format_exc())
         
-        if not args.no_wandb:
-            wandb.log({"error": str(e), "evaluation_failed": True})
-            wandb.finish()
+        # Only log to wandb if it was successfully initialized
+        if not args.no_wandb and wandb.run is not None:
+            try:
+                wandb.log({"error": str(e), "evaluation_failed": True})
+                wandb.finish()
+            except Exception:
+                pass  # Silently fail if wandb logging fails
         
         return 1
 
