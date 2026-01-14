@@ -1,6 +1,6 @@
 {
   "question_id": "124088",
-  "dataset_path": "twohopfact_filtered.json",
+  "dataset_path": "data_prep/twohopfact_filtering/filtered_data/filtered_dataset.json",
   "model_name": "meta-llama/Meta-Llama-3.1-8B-Instruct",
   "selfie_method": "untrained",
   "scale": 10.0,
