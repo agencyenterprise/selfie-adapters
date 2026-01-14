@@ -21,7 +21,7 @@ data:
 projection:
   type: "scalar_affine"  # f(x) = scale * x + bias
   normalize_input: true
-  init_scale: 30.0
+  init_scale: 5.0
 
 soft_prompt:
   template: |-

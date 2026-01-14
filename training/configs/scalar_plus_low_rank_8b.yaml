@@ -21,7 +21,7 @@ data:
 projection:
   type: "scalar_affine_plus_low_rank"
   normalize_input: true
-  init_scale: 30.0
+  init_scale: 5.0
   low_rank_rank: 64  # Rank-64 achieves best validation loss in paper
   low_rank_init_factor: 0.01
 
