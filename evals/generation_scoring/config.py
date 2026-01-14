@@ -78,6 +78,11 @@ class LabelGeneratorConfig:
 
     # Vector preprocessing (applied before scaling and adapter)
     normalize_vectors: bool = True  # Normalize SAE vectors to unit length before scaling
+    
+    # Adapter normalization override
+    # CRITICAL for scale calibration: When testing multiple scale_values, set this to False
+    # to prevent the adapter from re-normalizing already-scaled vectors
+    override_normalize_input: Optional[bool] = None  # None = use adapter's training config, False = skip adapter normalization, True = force normalization
 
     # Generation parameters
     temperature: float = 0.7
