@@ -76,13 +76,11 @@ class LabelGeneratorConfig:
     # Adapter checkpoint (optional - None uses identity projection for zero-bias baseline)
     adapter_checkpoint_path: Optional[str] = None  # Path to SelfIE adapter checkpoint (.pt file), or None for identity (zero bias)
 
-    # Vector preprocessing (applied before scaling and adapter)
+    # Vector preprocessing (applied before scaling, then passed to adapter)
+    # NOTE: The adapter wrapper automatically disables its internal normalization during
+    # evaluation to prevent it from undoing the scale_values. This means normalization
+    # happens ONCE (here, before scaling) rather than twice.
     normalize_vectors: bool = True  # Normalize SAE vectors to unit length before scaling
-    
-    # Adapter normalization override
-    # CRITICAL for scale calibration: When testing multiple scale_values, set this to False
-    # to prevent the adapter from re-normalizing already-scaled vectors
-    override_normalize_input: Optional[bool] = None  # None = use adapter's training config, False = skip adapter normalization, True = force normalization
 
     # Generation parameters
     temperature: float = 0.7

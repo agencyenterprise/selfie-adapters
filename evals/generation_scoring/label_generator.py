@@ -22,16 +22,17 @@ from selfie_adapters import load_adapter
 class AdapterProjection:
     """Wrapper that loads and uses SelfIE adapters for projection."""
 
-    def __init__(self, checkpoint_path: str, device: torch.device, override_normalize_input: Optional[bool] = None):
+    def __init__(self, checkpoint_path: str, device: torch.device):
         self.checkpoint_path = checkpoint_path
         self.device = device
-        self.override_normalize_input = override_normalize_input
         self.adapter = load_adapter(checkpoint_path, device=str(device))
         self.metadata = self.adapter.get_metadata()
         self.model_dim = self.adapter.model_dim
 
     def forward(self, sae_vectors: torch.Tensor) -> torch.Tensor:
-        return self.adapter.transform(sae_vectors, normalize_input=self.override_normalize_input)
+        # Disable adapter's built-in normalization since evaluation_functions.py
+        # handles normalization before scaling (to make scale_values work correctly)
+        return self.adapter.transform(sae_vectors, normalize_input=False)
     
     def __call__(self, sae_vectors: torch.Tensor) -> torch.Tensor:
         return self.forward(sae_vectors)
@@ -69,7 +70,7 @@ class IdentityProjection:
         return {'scale': 1.0, 'bias_norm': 0.0}
 
 
-def create_projection_module(checkpoint_path: str, device: torch.device, model_dim: int = None, override_normalize_input: Optional[bool] = None, **kwargs):
+def create_projection_module(checkpoint_path: str, device: torch.device, model_dim: int = None, **kwargs):
     """Factory function to create projection modules."""
     if device == "auto" or str(device) == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -81,7 +82,7 @@ def create_projection_module(checkpoint_path: str, device: torch.device, model_d
             raise ValueError("model_dim is required when using identity projection")
         return IdentityProjection(model_dim=model_dim, device=device)
     
-    return AdapterProjection(checkpoint_path=checkpoint_path, device=device, override_normalize_input=override_normalize_input)
+    return AdapterProjection(checkpoint_path=checkpoint_path, device=device)
 
 
 class LabelGenerator(nn.Module):
@@ -121,16 +122,14 @@ class LabelGenerator(nn.Module):
         if not isinstance(self.device, torch.device):
             self.device = torch.device(self.device)
 
-        # Get adapter checkpoint path and normalization override
+        # Get adapter checkpoint path
         adapter_checkpoint_path = getattr(config, "adapter_checkpoint_path", None)
-        override_normalize_input = getattr(config, "override_normalize_input", None)
 
         # Create adapter-based projection (or identity projection if checkpoint_path is None)
         self.projection = create_projection_module(
             checkpoint_path=adapter_checkpoint_path,
             device=self.device,
             model_dim=model_dim,  # Required for identity projection fallback
-            override_normalize_input=override_normalize_input,
         )
 
         # Print projection info
