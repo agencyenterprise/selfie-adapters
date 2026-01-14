@@ -614,26 +614,15 @@ class SAERewardSystem:
                     batch_results.append(None)  # Use None to indicate error, never 0.0
 
         # Print summary statistics for successful computations only
-        successful_rewards = [
+        successful_results = [
             r
             for r in batch_results
             if (r is not None and (not isinstance(r, dict) or r.get("error") is None))
         ]
 
-        if successful_rewards:
-            if return_detailed_activations:
-                reward_values = [r["reward"] for r in successful_rewards]
-            else:
-                reward_values = successful_rewards
+        print(f"Computed {len(successful_results)} successful activation results")
 
-            if reward_values:
-                print(
-                    f"Computed {len(reward_values)} successful rewards - "
-                    f"Min: {min(reward_values):.4f}, Max: {max(reward_values):.4f}, "
-                    f"Mean: {sum(reward_values) / len(reward_values):.4f}"
-                )
-
-        errors = len(batch_results) - len(successful_rewards)
+        errors = len(batch_results) - len(successful_results)
         if errors > 0:
             print(f"⚠️  {errors} sequences failed with errors")
 
