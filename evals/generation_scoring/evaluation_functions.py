@@ -260,7 +260,6 @@ def evaluate_label_dataset(
                 sample_result = {
                     "sample_index": sample_idx,
                     "error": reward_result["error"],
-                    "reward": None,
                     "per_token_activations": None,
                     "num_tokens": 0,
                     "generated_text": reward_result.get("generated_text"),
@@ -270,7 +269,6 @@ def evaluate_label_dataset(
                 sample_result = {
                     "sample_index": sample_idx,
                     "error": None,
-                    "reward": reward_result["reward"],
                     "per_token_activations": reward_result["per_token_activations"],
                     "num_tokens": reward_result["num_tokens"],
                     "generated_text": reward_result.get("generated_text"),
@@ -556,7 +554,6 @@ def evaluate_label_generator(
                 sample_result = {
                     "sample_index": sample_idx,
                     "error": reward_result["error"],
-                    "reward": None,
                     "per_token_activations": None,
                     "num_tokens": 0,
                     "generated_text": reward_result.get("generated_text"),
@@ -565,7 +562,6 @@ def evaluate_label_generator(
                 sample_result = {
                     "sample_index": sample_idx,
                     "error": None,
-                    "reward": reward_result["reward"],
                     "per_token_activations": reward_result["per_token_activations"],
                     "num_tokens": reward_result["num_tokens"],
                     "generated_text": reward_result.get("generated_text"),

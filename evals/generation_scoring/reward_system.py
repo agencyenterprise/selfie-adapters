@@ -568,15 +568,12 @@ class SAERewardSystem:
                     # Convert to list for JSON serialization
                     per_token_activations = valid_activations.cpu().tolist()
 
-                    # Compute reward (mean of valid activations)
-                    if len(per_token_activations) > 0:
-                        reward = sum(per_token_activations) / len(per_token_activations)
-                    else:
-                        reward = 0.0  # Empty sequence case
+                    # Note: We intentionally do NOT compute a "reward" field here.
+                    # The misleading "mean activation" metric was removed.
+                    # Use compute_mean_max_hit_rate.py to compute the proper binary hit rate.
 
                     if return_detailed_activations:
                         result = {
-                            "reward": reward,
                             "per_token_activations": per_token_activations,
                             "num_tokens": len(per_token_activations),
                             "target_latent_index": target_latent_indices[i],
@@ -586,7 +583,8 @@ class SAERewardSystem:
                         }
                         batch_results.append(result)
                     else:
-                        batch_results.append(reward)
+                        # For non-detailed mode, just return the activations
+                        batch_results.append({"per_token_activations": per_token_activations})
 
                 # Clean up batch tensors
                 del batch_activations, target_activations, batch_hidden_states
