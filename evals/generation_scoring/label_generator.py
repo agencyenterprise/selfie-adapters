@@ -91,8 +91,8 @@ class LabelGenerator(nn.Module):
 
     Architecture:
     - Single linear projection from model_dim to model_dim
-    - Creates one soft token that is injected at each <|reserved_special_token_0|> position in the template
-    - Template uses explicit special token syntax with <|reserved_special_token_0|> placeholders
+    - Creates one soft token that is injected at each reserved token position in the template
+    - Template uses explicit special token syntax with reserved token placeholders (configurable)
     """
 
     def __init__(
@@ -109,8 +109,8 @@ class LabelGenerator(nn.Module):
         # Validate num_soft_tokens == 1
         if config.num_soft_tokens != 1:
             raise ValueError(
-                f"num_soft_tokens must be 1 for <|reserved_special_token_0|> token approach, got {config.num_soft_tokens}. "
-                f"This implementation assumes a single soft token is injected at multiple <|reserved_special_token_0|> positions."
+                f"num_soft_tokens must be 1 for reserved token approach, got {config.num_soft_tokens}. "
+                f"This implementation assumes a single soft token is injected at multiple reserved token positions."
             )
 
         self.config = config
@@ -188,7 +188,7 @@ class LabelGenerator(nn.Module):
         self, batch_soft_tokens: torch.Tensor
     ) -> list[str]:
         """
-        Generate descriptions using soft tokens injected at <|reserved_special_token_0|> positions.
+        Generate descriptions using soft tokens injected at reserved token positions.
 
         Args:
             batch_soft_tokens: Tensor of shape (batch_size, 1, model_dim)
@@ -197,17 +197,18 @@ class LabelGenerator(nn.Module):
             List of generated description strings
         """
         template = self.config.template
+        reserved_token = self.config.reserved_token
         batch_size = batch_soft_tokens.shape[0]
 
-        # Check if template contains <|reserved_special_token_0|> tokens
-        if "<|reserved_special_token_0|>" not in template:
+        # Check if template contains reserved tokens
+        if reserved_token not in template:
             raise ValueError(
-                f"Template must contain <|reserved_special_token_0|> tokens for injection. "
+                f"Template must contain {reserved_token} tokens for injection. "
                 f"Current template: {template}"
             )
 
-        # Count number of <|reserved_special_token_0|> tokens
-        num_inject_positions = template.count("<|reserved_special_token_0|>")
+        # Count number of reserved tokens
+        num_inject_positions = template.count(reserved_token)
 
         # Tokenize template with special tokens
         template_tokens = self.base_model.tokenizer(
@@ -216,7 +217,7 @@ class LabelGenerator(nn.Module):
 
         # Get special token ID for position finding
         inject_token_id = self.base_model.tokenizer.convert_tokens_to_ids(
-            "<|reserved_special_token_0|>"
+            reserved_token
         )
 
         # Get template embeddings
@@ -225,7 +226,7 @@ class LabelGenerator(nn.Module):
                 template_tokens["input_ids"]
             )  # Shape: (1, template_length, hidden_size)
 
-        # Find positions of <|reserved_special_token_0|> tokens in the tokenized sequence
+        # Find positions of reserved tokens in the tokenized sequence
         inject_positions = []
 
         for i, token_id in enumerate(template_tokens["input_ids"][0]):
@@ -234,9 +235,9 @@ class LabelGenerator(nn.Module):
 
         if len(inject_positions) != num_inject_positions:
             raise ValueError(
-                f"Mismatch between <|reserved_special_token_0|> count in text ({num_inject_positions}) "
+                f"Mismatch between {reserved_token} count in text ({num_inject_positions}) "
                 f"and tokenized positions ({len(inject_positions)}). "
-                f"The tokenizer may not recognize <|reserved_special_token_0|> as a single token."
+                f"The tokenizer may not recognize {reserved_token} as a single token."
             )
 
         # Expand template embeddings to match batch size
@@ -248,10 +249,10 @@ class LabelGenerator(nn.Module):
             dtype=template_embeds.dtype, device=template_embeds.device
         )
 
-        # Create modified embeddings by replacing <|reserved_special_token_0|> positions with soft tokens
+        # Create modified embeddings by replacing reserved token positions with soft tokens
         modified_embeds = template_embeds.clone()
 
-        # Replace each <|reserved_special_token_0|> position with the soft token
+        # Replace each reserved token position with the soft token
         for pos in inject_positions:
             modified_embeds[:, pos, :] = batch_soft_tokens[
                 :, 0, :
@@ -351,12 +352,13 @@ class LabelGenerator(nn.Module):
 
         # Get template setup
         template = self.config.template
+        reserved_token = self.config.reserved_token
         template_tokens = self.base_model.tokenizer(
             template, return_tensors="pt", add_special_tokens=False
         ).to(self.device)
 
         inject_token_id = self.base_model.tokenizer.convert_tokens_to_ids(
-            "<|reserved_special_token_0|>"
+            reserved_token
         )
         inject_positions = [
             i

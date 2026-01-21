@@ -92,6 +92,10 @@ class LabelGeneratorConfig:
     # If True, strips the last double quote from generated text (allows quotes inside labels)
     # If False, takes text up to first double quote (legacy behavior)
     strip_last_quote: bool = True
+    
+    # Reserved token for soft prompt injection
+    # This token will be replaced with the soft prompt embeddings
+    reserved_token: str = "<|reserved_special_token_0|>"
 
 
 @dataclass
