@@ -157,7 +157,11 @@ class Trainer:
         Sanity check to prevent accidentally wasting compute on validation.
         
         Estimates the ratio of validation forward passes to training forward passes.
-        If validation would consume more than 25% of total compute, raises an error.
+        If validation would consume more than 50% of total compute, raises an error.
+        
+        This correctly accounts for max_steps when calculating the ratio, so it compares
+        the validation batches you'll actually run to the training batches you'll actually
+        process (limited by max_steps if set).
         
         This catches common mistakes like forgetting to set val_fraction on large datasets.
         """
@@ -166,26 +170,45 @@ class Trainer:
         
         config = self.config
         
-        # Training batches per epoch
+        # Training examples and batches per epoch
+        train_examples_per_epoch = len(self.train_loader.dataset)
         train_batches_per_epoch = len(self.train_loader)
         
-        # Validation batches per validation run (already subsampled if val_fraction < 1)
+        # Validation examples and batches per run (already subsampled if val_fraction < 1)
+        val_examples_per_run = len(self.val_loader.dataset)
         val_batches_per_run = len(self.val_loader)
         
-        # Number of optimizer steps per epoch
+        # Number of optimizer steps per epoch (or until max_steps)
         steps_per_epoch = train_batches_per_epoch // config.training.gradient_accumulation_steps
         
-        # Number of validation runs per epoch
-        val_runs_per_epoch = steps_per_epoch / config.training.validation_every_n_steps
+        # If max_steps is set and less than a full epoch, use that instead
+        if config.training.max_steps is not None and config.training.max_steps < steps_per_epoch:
+            steps_to_check = config.training.max_steps
+            print(f"⚠️  max_steps ({config.training.max_steps}) < steps_per_epoch ({steps_per_epoch})")
+            print(f"   Validation compute check will use max_steps for calculation")
+        else:
+            steps_to_check = steps_per_epoch
         
-        # Total validation batches per epoch
-        total_val_batches_per_epoch = val_batches_per_run * val_runs_per_epoch
+        # Number of validation runs 
+        val_runs_per_epoch = steps_to_check / config.training.validation_every_n_steps
         
-        # Ratio of validation to training compute
-        val_to_train_ratio = total_val_batches_per_epoch / train_batches_per_epoch
+        # Total validation batches across all runs
+        total_val_batches = val_batches_per_run * val_runs_per_epoch
+        
+        # Total training batches that will actually be processed
+        # (might be less than train_batches_per_epoch if using max_steps)
+        train_batches_to_process = steps_to_check * config.training.gradient_accumulation_steps
+        
+        # Ratio of validation to training compute (at the forward pass level)
+        # Both train and val do one forward pass per batch, so we compare batch counts
+        val_to_train_ratio = total_val_batches / train_batches_to_process
         
         # 50% threshold - if validation is more than 1/2 of training compute, something's probably wrong
         THRESHOLD = 0.5
+        
+        # Compute what the user actually observes: batches between validation runs
+        train_batches_between_val_runs = config.training.validation_every_n_steps * config.training.gradient_accumulation_steps
+        val_to_train_ratio_per_run = val_batches_per_run / train_batches_between_val_runs if train_batches_between_val_runs > 0 else 0
         
         if val_to_train_ratio > THRESHOLD:
             error_msg = (
@@ -196,10 +219,21 @@ class Trainer:
                 f"Validation would consume {val_to_train_ratio:.1%} of compute (threshold: {THRESHOLD:.0%})\n"
                 f"\n"
                 f"Details:\n"
-                f"  • Training batches per epoch: {train_batches_per_epoch:,}\n"
+                f"  • Training examples in dataset: {train_examples_per_epoch:,}\n"
+                f"  • Training batches in dataset: {train_batches_per_epoch:,}\n"
+                f"  • Gradient accumulation steps: {config.training.gradient_accumulation_steps}\n"
+                f"  • Steps per full epoch: {steps_per_epoch:,}\n"
+                f"  • Steps to check (limited by max_steps): {steps_to_check:,}\n"
+                f"  • Training batches to process: {train_batches_to_process:,}\n"
+                f"  • Validation runs: {val_runs_per_epoch:.1f}\n"
+                f"  • Val examples per run: {val_examples_per_run:,}\n"
+                f"  • Val batches per run: {val_batches_per_run:,}\n"
+                f"  • Total val batches: {total_val_batches:,.0f}\n"
+                f"\n"
+                f"Per validation run:\n"
+                f"  • Training batches between val runs: {train_batches_between_val_runs:,}\n"
                 f"  • Validation batches per run: {val_batches_per_run:,}\n"
-                f"  • Validation runs per epoch: {val_runs_per_epoch:.1f}\n"
-                f"  • Total val batches per epoch: {total_val_batches_per_epoch:,.0f}\n"
+                f"  • Ratio (per run): {val_to_train_ratio_per_run:.1%}\n"
                 f"\n"
                 f"This usually means you forgot to set val_fraction for a large dataset.\n"
                 f"\n"
@@ -211,7 +245,11 @@ class Trainer:
             )
             raise ValueError(error_msg)
         else:
-            print(f"✓ Validation compute check passed: {val_to_train_ratio:.1%} of training (threshold: {THRESHOLD:.0%})")
+            print(f"✓ Validation compute check passed:")
+            print(f"    Overall: {val_to_train_ratio:.1%} of training compute (threshold: {THRESHOLD:.0%})")
+            print(f"    Train batches to process: {train_batches_to_process:,} (steps: {steps_to_check:,}, grad_accum: {config.training.gradient_accumulation_steps})")
+            print(f"    Val batches per run: {val_batches_per_run:,}, Validation runs: {val_runs_per_epoch:.1f}, Total val batches: {total_val_batches:.0f}")
+            print(f"    Per validation run: {val_batches_per_run:,} val batches / {train_batches_between_val_runs:,} train batches ({val_to_train_ratio_per_run:.1%})")
     
     def _init_mlflow(self):
         """Initialize MLflow logging."""
@@ -391,8 +429,11 @@ class Trainer:
         """Setup learning rate scheduler with warmup."""
         # Calculate total steps
         steps_per_epoch = len(self.train_loader) // self.config.training.gradient_accumulation_steps
-        total_steps = steps_per_epoch * self.config.training.num_epochs
-        
+        if self.config.training.max_steps is not None:
+            total_steps = self.config.training.max_steps
+        else:
+            total_steps = steps_per_epoch * self.config.training.num_epochs
+
         if self.config.training.scheduler_type == "cosine":
             scheduler = CosineAnnealingLR(
                 self.optimizer,
