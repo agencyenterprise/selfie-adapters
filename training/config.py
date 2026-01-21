@@ -60,6 +60,7 @@ class SoftPromptConfig:
         "<|start_header_id|>assistant<|end_header_id|>\n\n"
         'The meaning of "<|reserved_special_token_0|>" is "'
     )
+    reserved_token: str = "<|reserved_special_token_0|>"  # Token to replace with soft vectors
 
 
 @dataclass

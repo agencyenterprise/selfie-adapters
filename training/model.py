@@ -67,15 +67,15 @@ class SelfIEModel:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # Handle reserved special token
-        reserved_token = "<|reserved_special_token_0|>"
+        # Handle injection token (add if not in vocabulary)
+        injection_token = config.soft_prompt.reserved_token
         num_added = 0
         
-        if reserved_token not in self.tokenizer.get_vocab():
-            num_added = self.tokenizer.add_tokens([reserved_token], special_tokens=True)
-            print(f"✓ Added reserved token '{reserved_token}' to tokenizer vocabulary")
+        if injection_token not in self.tokenizer.get_vocab():
+            num_added = self.tokenizer.add_tokens([injection_token], special_tokens=True)
+            print(f"✓ Added injection token '{injection_token}' to tokenizer vocabulary")
         else:
-            print(f"✓ Reserved token '{reserved_token}' already in tokenizer vocabulary")
+            print(f"✓ Injection token '{injection_token}' already in tokenizer vocabulary")
         
         print(f"Loading model with dtype='auto' and device_map='{config.model.device_map}'...")
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -118,12 +118,14 @@ class SelfIEModel:
             init_scale=config.projection.init_scale,
             low_rank_rank=config.projection.low_rank_rank,
             low_rank_init_factor=config.projection.low_rank_init_factor,
+            init_mode=config.projection.init_mode,
         )
         
         print("✓ Projection module kept in float32 for training stability")
         
         # Prepare template
         self.template = config.soft_prompt.template
+        self.injection_token = config.soft_prompt.reserved_token
         self._prepare_template()
     
     def _prepare_template(self):
@@ -134,7 +136,7 @@ class SelfIEModel:
             add_special_tokens=False,
         )
         
-        inject_token_id = self.tokenizer.convert_tokens_to_ids("<|reserved_special_token_0|>")
+        inject_token_id = self.tokenizer.convert_tokens_to_ids(self.injection_token)
         self.inject_positions = [
             i for i, token_id in enumerate(self.template_tokens["input_ids"][0])
             if token_id == inject_token_id
@@ -142,6 +144,7 @@ class SelfIEModel:
         
         print("\nTemplate prepared:")
         print(f"  Length: {self.template_tokens['input_ids'].shape[1]} tokens")
+        print(f"  Injection token: {self.injection_token}")
         print(f"  Injection positions: {self.inject_positions}")
     
     def compute_loss(
