@@ -118,7 +118,6 @@ class SelfIEModel:
             init_scale=config.projection.init_scale,
             low_rank_rank=config.projection.low_rank_rank,
             low_rank_init_factor=config.projection.low_rank_init_factor,
-            init_mode=config.projection.init_mode,
         )
         
         print("✓ Projection module kept in float32 for training stability")
