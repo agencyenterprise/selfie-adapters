@@ -54,6 +54,7 @@ image = (
 cache_volume = modal.Volume.from_name("sae-model-cache", create_if_missing=True)
 results_volume = modal.Volume.from_name("sae-eval-results", create_if_missing=True)
 sae_data_volume = modal.Volume.from_name("sae-data", create_if_missing=True)
+training_volume = modal.Volume.from_name("selfie-adapter-training", create_if_missing=True)
 
 
 @app.function(
@@ -65,6 +66,7 @@ sae_data_volume = modal.Volume.from_name("sae-data", create_if_missing=True)
         "/cache": cache_volume,
         "/results": results_volume,
         "/sae-data": sae_data_volume,
+        "/training": training_volume,  # selfie-adapter-training volume
     },
     secrets=[
         modal.Secret.from_name("huggingface-token"),
@@ -315,8 +317,10 @@ def main(config_file: str, num_parallel_instances: int = 1):
 
     if successful_shards:
         print("\n📁 Results saved to Modal volume 'sae-eval-results'")
-        print("\nTo download results:")
-        print(f"   modal volume get sae-eval-results /eval_results_shard_*_{run_id}.json ./results/")
+        for result in successful_shards:
+            print(f"   - {result['result_file']}")
+        print("\nTo merge results, run:")
+        print(f"   python evals/generation_scoring/merge_shards.py --run-id {run_id} --output merged_results_{run_id}.json")
 
     if failed_shards:
         print("\n❌ Failed shards:")
