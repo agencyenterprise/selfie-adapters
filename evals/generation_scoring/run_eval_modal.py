@@ -35,7 +35,7 @@ image = (
         "wandb>=0.16.0",
         "numpy>=1.24.0",
         "tqdm>=4.65.0",
-        "nnsight>=4.0.0,<5.0.0",
+        "nnsight>=0.4.0,<0.5.0",
         "safetensors>=0.3.0",
         "sae-lens>=4.0.0",
     )
