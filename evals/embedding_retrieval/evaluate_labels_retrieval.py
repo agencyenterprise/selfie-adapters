@@ -15,8 +15,10 @@ import argparse
 from pathlib import Path
 from collections import defaultdict
 
-# Add evals to path
-sys.path.insert(0, str(Path(__file__).parent / "evals"))
+# Ensure repo root is on the path so this works both as a script and as a module
+_repo_root = str(Path(__file__).resolve().parent.parent.parent)
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from evals.embedding_retrieval.topic_retrieval_eval import (
     TopicRetrievalIndex,
@@ -126,13 +128,13 @@ def main():
         epilog="""
 Examples:
   # Evaluate labels with default settings
-  python evaluate_labels_retrieval.py results/qwen_scaling/7b_trained/labels_with_metadata.json
+  python evals/embedding_retrieval/evaluate_labels_retrieval.py results/qwen_scaling/7b_trained/labels_with_metadata.json
   
   # Use a different index strategy
-  python evaluate_labels_retrieval.py results/my_labels.json --index-strategy title_plus_all_labels
+  python evals/embedding_retrieval/evaluate_labels_retrieval.py results/my_labels.json --index-strategy title_plus_all_labels
   
   # Evaluate only specific scales
-  python evaluate_labels_retrieval.py results/my_labels.json --scales 1.0 2.0
+  python evals/embedding_retrieval/evaluate_labels_retrieval.py results/my_labels.json --scales 1.0 2.0
         """
     )
     parser.add_argument(
