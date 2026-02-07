@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Lightweight inference utilities for trained SelfIE adapters."""
 
+import json
 from typing import Optional, Dict, Any
 import torch
 
@@ -15,18 +16,22 @@ class SelfIEAdapter:
     and use it for inference without loading the full training infrastructure
     (language model, optimizer, etc.).
     
+    Supports both formats:
+    - .safetensors (recommended for HuggingFace, weights + metadata in header)
+    - .pt (legacy PyTorch checkpoint format)
+    
     Example:
-        >>> adapter = SelfIEAdapter("checkpoint.pt")
+        >>> adapter = SelfIEAdapter("adapter.safetensors")
         >>> soft_tokens = adapter.transform(sae_vectors)
         >>> print(adapter.get_metadata())
     """
     
     def __init__(self, checkpoint_path: str, device: Optional[str] = None):
         """
-        Load a trained SelfIE adapter from checkpoint.
+        Load a trained SelfIE adapter from a checkpoint file.
         
         Args:
-            checkpoint_path: Path to checkpoint .pt file
+            checkpoint_path: Path to adapter file (.safetensors or .pt)
             device: Device to load projection on (e.g., "cpu", "cuda", "cuda:0").
                    If None, uses "cuda" if available, otherwise "cpu".
         
@@ -39,9 +44,112 @@ class SelfIEAdapter:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         
-        # Load checkpoint
+        # Dispatch based on file extension
+        if checkpoint_path.endswith(".safetensors"):
+            projection_state, proj_config, model_dim, extra_meta = (
+                self._load_safetensors(checkpoint_path)
+            )
+        else:
+            projection_state, proj_config, model_dim, extra_meta = (
+                self._load_pt(checkpoint_path)
+            )
+        
+        # Store metadata
+        self.model_dim = model_dim
+        self.config = proj_config
+        self.checkpoint_path = checkpoint_path
+        self.checkpoint_format_version = extra_meta.get("checkpoint_format_version", 0)
+        self.global_step = extra_meta.get("global_step", None)
+        self.best_val_loss = extra_meta.get("best_val_loss", None)
+        
+        # Recreate projection module with exact training configuration
+        print(f"Loading {proj_config['type']} projection (dim={model_dim}) from {checkpoint_path}")
+        self.projection = create_projection_module(
+            projection_type=proj_config["type"],
+            dim=model_dim,
+            normalize_input=proj_config["normalize_input"],
+            device=self.device,
+            init_scale=proj_config.get("init_scale", 30.0),
+            low_rank_rank=proj_config.get("low_rank_rank"),
+            low_rank_init_factor=proj_config.get("low_rank_init_factor"),
+        )
+        
+        # Load trained weights
+        self.projection.load_state_dict(projection_state)
+        
+        # Set to evaluation mode
+        self.projection.eval()
+        
+        # Verify parameter count if available
+        expected_params = extra_meta.get("projection_num_params")
+        if expected_params is not None:
+            actual = self.projection.num_parameters()
+            if expected_params != actual:
+                print(f"WARNING: Parameter count mismatch. Expected {expected_params}, got {actual}")
+        
+        print(f"✓ Loaded adapter with {self.projection.num_parameters():,} parameters")
+    
+    def _load_safetensors(self, path: str):
+        """
+        Load adapter from safetensors format.
+        
+        Returns:
+            (projection_state, proj_config, model_dim, extra_meta)
+        """
+        from safetensors import safe_open
+        from safetensors.torch import load_file as safetensors_load_file
+        
+        # Load tensors (projection weights)
+        projection_state = safetensors_load_file(path, device=str(self.device))
+        
+        # Load metadata from header
+        with safe_open(path, framework="pt") as f:
+            meta = f.metadata()
+        
+        if meta is None:
+            raise ValueError(
+                f"Safetensors file has no metadata header: {path}. "
+                f"Expected selfie_adapter_v1 format."
+            )
+        
+        # Parse config from metadata
+        if "config_json" in meta:
+            config_dict = json.loads(meta["config_json"])
+            proj_config = config_dict["projection"]
+        else:
+            # Fallback: reconstruct proj_config from flat metadata keys
+            proj_config = {
+                "type": meta.get("projection_type", ""),
+                "normalize_input": meta.get("normalize_input", "true").lower() == "true",
+                "init_scale": float(meta["init_scale"]) if "init_scale" in meta else 30.0,
+                "low_rank_rank": int(meta["low_rank_rank"]) if meta.get("low_rank_rank") else None,
+                "low_rank_init_factor": None,
+            }
+        
+        # Get model dimension
+        if "model_dim" in meta:
+            model_dim = int(meta["model_dim"])
+        else:
+            model_dim = self._infer_dim_from_state(projection_state, proj_config)
+        
+        # Extra metadata
+        extra_meta = {}
+        if "global_step" in meta:
+            extra_meta["global_step"] = int(meta["global_step"])
+        if "best_val_loss" in meta:
+            extra_meta["best_val_loss"] = float(meta["best_val_loss"])
+        
+        return projection_state, proj_config, model_dim, extra_meta
+    
+    def _load_pt(self, path: str):
+        """
+        Load adapter from PyTorch .pt checkpoint format.
+        
+        Returns:
+            (projection_state, proj_config, model_dim, extra_meta)
+        """
         # Note: weights_only=False is required because checkpoint contains config dict
-        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         
         # Validate checkpoint format
         if "projection_state" not in checkpoint:
@@ -62,51 +170,23 @@ class SelfIEAdapter:
             raise ValueError("Invalid checkpoint: config missing 'projection' section")
         
         proj_config = config_dict["projection"]
+        projection_state = checkpoint["projection_state"]
         
         # Get model dimension
         if "model_dim" in checkpoint:
             model_dim = checkpoint["model_dim"]
         else:
-            # Old checkpoint format - infer from state dict
-            model_dim = self._infer_dim_from_state(
-                checkpoint["projection_state"],
-                proj_config
-            )
+            model_dim = self._infer_dim_from_state(projection_state, proj_config)
         
-        # Store metadata
-        self.model_dim = model_dim
-        self.config = proj_config
-        self.checkpoint_path = checkpoint_path
-        self.checkpoint_format_version = checkpoint.get("checkpoint_format_version", 0)
-        self.global_step = checkpoint.get("global_step", None)
-        self.best_val_loss = checkpoint.get("best_val_loss", None)
+        # Extra metadata
+        extra_meta = {
+            "checkpoint_format_version": checkpoint.get("checkpoint_format_version", 0),
+            "global_step": checkpoint.get("global_step"),
+            "best_val_loss": checkpoint.get("best_val_loss"),
+            "projection_num_params": checkpoint.get("projection_num_params"),
+        }
         
-        # Recreate projection module with exact training configuration
-        print(f"Loading {proj_config['type']} projection (dim={model_dim}) from {checkpoint_path}")
-        self.projection = create_projection_module(
-            projection_type=proj_config["type"],
-            dim=model_dim,
-            normalize_input=proj_config["normalize_input"],
-            device=self.device,
-            init_scale=proj_config.get("init_scale", 30.0),
-            low_rank_rank=proj_config.get("low_rank_rank"),
-            low_rank_init_factor=proj_config.get("low_rank_init_factor"),
-        )
-        
-        # Load trained weights
-        self.projection.load_state_dict(checkpoint["projection_state"])
-        
-        # Set to evaluation mode
-        self.projection.eval()
-        
-        # Verify parameter count if available
-        if "projection_num_params" in checkpoint:
-            expected = checkpoint["projection_num_params"]
-            actual = self.projection.num_parameters()
-            if expected != actual:
-                print(f"WARNING: Parameter count mismatch. Expected {expected}, got {actual}")
-        
-        print(f"✓ Loaded adapter with {self.projection.num_parameters():,} parameters")
+        return projection_state, proj_config, model_dim, extra_meta
     
     def _infer_dim_from_state(self, state_dict: Dict[str, torch.Tensor], config: Dict[str, Any]) -> int:
         """Infer model dimension from state dict (fallback for old checkpoints)."""
@@ -249,14 +329,14 @@ def load_adapter(checkpoint_path: str, device: Optional[str] = None) -> SelfIEAd
     Convenience function to load a SelfIE adapter.
     
     Args:
-        checkpoint_path: Path to checkpoint .pt file
+        checkpoint_path: Path to adapter file (.safetensors or .pt)
         device: Device to load on (default: auto-detect)
     
     Returns:
         Loaded SelfIEAdapter instance
     
     Example:
-        >>> adapter = load_adapter("checkpoint.pt")
+        >>> adapter = load_adapter("goodfire-sae-scalar-affine.safetensors")
         >>> soft_tokens = adapter.transform(vectors)
     """
     return SelfIEAdapter(checkpoint_path, device)
