@@ -1,3 +1,8 @@
+# Full dependency list (for development).
+# For lighter installs, use: pip install -e .          (core only)
+#                         or: pip install -e ".[sae]"   (+ sae-lens)
+#                         or: pip install -e ".[all]"   (everything)
+#
 # Core dependencies
 torch>=2.0.0
 transformers>=4.44.0
