@@ -9,6 +9,8 @@ This repository contains code for:
 - **Evaluating** trained adapters on generation scoring, embedding retrieval, and bridge entity extraction tasks
 - **Preparing** training and evaluation datasets
 
+Pre-trained adapter checkpoints are available in the [Trained SelfIE Adapters](https://huggingface.co/collections/keenanpepper/trained-selfie-adapters) collection on HuggingFace.
+
 ## Repository Structure
 
 ```
@@ -93,10 +95,17 @@ python train.py --config configs/scalar_affine_8b_goodfire.yaml
 ### Loading a Trained Adapter for Inference
 
 ```python
+from huggingface_hub import hf_hub_download
 from selfie_adapters import load_adapter
 
-# Load trained adapter
-adapter = load_adapter("checkpoint.pt")
+# Download a trained adapter from HuggingFace
+path = hf_hub_download(
+    repo_id="keenanpepper/selfie-adapters-llama-3.1-8b-instruct",
+    filename="goodfire-sae-scalar-affine.safetensors",
+)
+
+# Load it
+adapter = load_adapter(path)
 
 # Transform SAE decoder vectors to soft tokens
 soft_tokens = adapter.transform(sae_vectors)
