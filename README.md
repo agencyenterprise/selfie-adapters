@@ -48,7 +48,7 @@ The paper evaluates several projection architectures, ordered by performance:
 | `scalar_affine` | d + 1 | Strong baseline: f(x) = scale·x + bias |
 | `low_rank_only` | 2dr + d | Pure low-rank: f(x) = x·UV^T + bias |
 | `scale_only` | 1 | Minimal: f(x) = scale·x |
-| `full_rank` | d² + d | Overfits; not recommended |
+| `full_rank` | d² + d | Overfits SAEs but performs best for topic vectors |
 
 Where d = model dimension (4096 for Llama 3.1 8B) and r = rank.
 
