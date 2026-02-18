@@ -394,12 +394,14 @@ This filters for questions where the model correctly answers both the bridge ent
 If you use this code, please cite:
 
 ```bibtex
-% PLACEHOLDER - This citation will be updated with final publication details
-@inproceedings{selfie2026,
-  title={Learning Self-Interpretation from Interpretability Artifacts: Training Lightweight Adapters on Vector-Label Pairs},
-  author={TBD},
-  booktitle={TBD},
-  year={2026}
+@misc{pepper2026learningselfinterpretationinterpretabilityartifacts,
+  title={Learning Self-Interpretation from Interpretability Artifacts: Training Lightweight Adapters on Vector-Label Pairs}, 
+  author={Keenan Pepper and Alex McKenzie and Florin Pop and Stijn Servaes and Martin Leitgab and Mike Vaiana and Judd Rosenblatt and Michael S. A. Graziano and Diogo de Lucena},
+  year={2026},
+  eprint={2602.10352},
+  archivePrefix={arXiv},
+  primaryClass={cs.CL},
+  url={https://arxiv.org/abs/2602.10352},
 }
 ```
 
