@@ -824,12 +824,13 @@ class Trainer:
                 max_loss=self.config.training.max_loss,
             )
             
-            # Scale loss by accumulation steps
-            loss = loss / self.config.training.gradient_accumulation_steps
-            
+            # Scale loss by accumulation steps for gradient averaging
+            scaled_loss = loss / self.config.training.gradient_accumulation_steps
+
             # Backward pass
-            loss.backward()
-            
+            scaled_loss.backward()
+
+            # Accumulate unscaled loss for logging
             accumulated_loss += loss.item()
             accumulation_count += 1
             
